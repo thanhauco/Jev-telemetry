@@ -1,0 +1,96 @@
+# L1 starter question pack, asked of every cluster in one parallel Jev request.
+#
+# Jev answers each question in isolation against the same state. Write every question so it stands
+# alone: never assume the answer to one question is visible to another.
+#
+# The state is a JSON cluster summary: service, level, template, occurrences, first/last seen and up
+# to three scrubbed example lines.
+
+version: 1
+
+questions:
+  category:
+    type: choice
+    instructions: >-
+      This is a summary of one recurring log message pattern from a production service. Which failure
+      category best describes what the log pattern indicates?
+    criteria:
+      timeout: A request or operation exceeded a deadline or timed out.
+      auth: Authentication or authorization failed, or credentials were rejected or expired.
+      capacity: A resource is exhausted, such as a pool, queue, memory, disk, quota or rate limit.
+      dependency: A downstream service, database or third-party API is failing or unreachable.
+      config: A configuration value, feature flag or environment setting is missing or invalid.
+      data: Input or stored data is malformed, inconsistent, or fails validation.
+      code_bug: A programming error such as a null reference, unhandled exception or assertion.
+      infra: A host, container, network, DNS or orchestration problem.
+      none: Routine operation; the pattern does not indicate a failure.
+
+  component:
+    type: choice
+    instructions: >-
+      This is a summary of one recurring log message pattern from a production service. Which layer
+      of the system does the pattern most directly concern?
+    criteria:
+      edge: Load balancer, API gateway, CDN or ingress.
+      application: Application business logic inside the service.
+      database: A relational or document database, or its connection pool.
+      cache: An in-memory or distributed cache.
+      queue: A message queue, stream or background job system.
+      external_api: A third-party API or another internal service called over the network.
+      platform: Host, container runtime, orchestrator, network or DNS.
+
+  severity:
+    type: score
+    instructions: >-
+      This is a summary of one recurring log message pattern from a production service. How severe is
+      the condition the pattern describes, for the health of the service?
+    criteria:
+      - "Informational: normal operation, nothing is wrong."
+      - "Minor: a degraded edge case that recovers on its own."
+      - "Moderate: a real fault affecting some requests that needs attention soon."
+      - "Major: a significant fault affecting many requests or a core function."
+      - "Critical: an outage, data loss, or a security incident in progress."
+
+  user_impact:
+    type: score
+    instructions: >-
+      This is a summary of one recurring log message pattern from a production service. How much are
+      end users likely to notice the condition this pattern describes?
+    criteria:
+      - "Not visible to users."
+      - "Slightly slower or occasionally retried, but users can complete their tasks."
+      - "Some users see errors or failed actions."
+      - "Many users cannot complete a core task such as login or checkout."
+
+  actionable:
+    type: noul
+    instructions: >-
+      This is a summary of one recurring log message pattern from a production service. Should an
+      on-call engineer investigate or act on this pattern?
+
+  benign:
+    type: noul
+    instructions: >-
+      This is a summary of one recurring log message pattern from a production service. Is this
+      pattern expected, routine noise that is safe to hide from an on-call triage view?
+
+  root_cause:
+    type: noul
+    instructions: >-
+      This is a summary of one recurring log message pattern from a production service. Does the
+      pattern describe the originating fault itself, rather than a downstream symptom of a failure
+      somewhere else?
+
+  novel:
+    type: noul
+    instructions: >-
+      This is a summary of one recurring log message pattern from a production service. Does the
+      pattern suggest an unusual or new failure mode, rather than a common and well-understood
+      condition?
+
+  sensitive:
+    type: noul
+    instructions: >-
+      This is a summary of one recurring log message pattern. Do the template or examples still
+      contain personal data, credentials, secrets, tokens or keys that are not already masked by a
+      placeholder in angle brackets?

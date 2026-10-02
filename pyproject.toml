@@ -1,0 +1,38 @@
+[project]
+name = "jev-telemetry"
+version = "0.1.0"
+description = "Jev as a parallel judgment layer for logs and telemetry: reduce, judge, route, correlate, narrate, evaluate."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+  "httpx>=0.27",
+  "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# L4 narrative via Claude.
+narrate = ["anthropic"]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[project.scripts]
+jev-telemetry = "jev_telemetry.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jev_telemetry"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "DTZ", "RUF"]
+ignore = ["RUF046", "RUF001", "B905", "E731"]

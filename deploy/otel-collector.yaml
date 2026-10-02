@@ -1,0 +1,65 @@
+# OTel Collector: batching, first-pass redaction, ClickHouse export.
+# Apps send OTLP (structured JSON logs with trace_id, service, env, version, event code).
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 1024
+    spike_limit_mib: 256
+
+  # Redact before storage and before anything reaches Jev. The worker's scrubber is the second
+  # layer and the `sensitive` Noul the third. `$$` escapes `$` from collector env expansion.
+  transform/redact:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          - 'replace_pattern(body, "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}", "<EMAIL>")'
+          - 'replace_pattern(body, "(?i)((password|passwd|secret|token|api[_-]?key)\\s*[=:]\\s*)[^\\s,;]+", "$$1<SECRET>")'
+          - 'replace_pattern(body, "(?i)bearer\\s+[A-Za-z0-9._~+/=-]{12,}", "Bearer <BEARER>")'
+          - 'replace_pattern(body, "\\b(?:\\d[ -]?){13,19}\\b", "<CARD>")'
+          - 'replace_pattern(body, "\\b\\d{3}-\\d{2}-\\d{4}\\b", "<SSN>")'
+
+  # Keep 100% of WARN and above. To sample DEBUG, split DEBUG into its own pipeline with the
+  # routing connector and a probabilistic_sampler; at ~10k users it is rarely worth the complexity.
+
+  batch:
+    send_batch_size: 10000
+    timeout: 5s
+
+exporters:
+  clickhouse:
+    endpoint: tcp://clickhouse:9000?dial_timeout=10s
+    database: otel
+    logs_table_name: otel_logs
+    traces_table_name: otel_traces
+    ttl: 720h            # 30 days hot; archive Parquet to object storage for longer retention
+    create_schema: true
+    timeout: 10s
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, transform/redact, batch]
+      exporters: [clickhouse]
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [clickhouse]

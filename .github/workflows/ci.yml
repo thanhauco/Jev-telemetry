@@ -1,0 +1,23 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv venv --python ${{ matrix.python }} && uv pip install -e ".[dev,narrate]"
+      - run: uv run ruff check src tests
+      - run: uv run pytest -q
+      # Guardrail: the offline judge must never suppress a labeled real issue on the sample golden set.
+      - run: |
+          uv run jev-telemetry generate-sample --out samples
+          uv run jev-telemetry eval --golden samples/golden.jsonl --no-cache --max-false-suppression 0

@@ -1,0 +1,6 @@
+.venv
+.git
+out
+samples
+.jev-cache
+**/__pycache__

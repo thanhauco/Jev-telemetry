@@ -1,0 +1,72 @@
+# Jev-telemetry configuration. Environment overrides: JEV_BACKEND, JEV_MODEL, TYPESAFE_API_KEY,
+# CLICKHOUSE_URL, CLICKHOUSE_USER, CLICKHOUSE_PASSWORD.
+
+judge:
+  backend: heuristic          # jev | heuristic (offline, no key needed)
+  model: jev-1.13.0           # pin it: cache keys and tuned thresholds depend on the version
+  endpoint: https://api.typesafe.ai/v1/systemone
+  fallback: heuristic         # deterministic fallback when Jev fails; set to null to dead-letter only
+  concurrency: 32
+  max_retries: 3
+  rpm: 1200                   # published launch-week limit; check your account
+  timeout_s: 30
+
+cache:
+  path: .jev-cache/answers.sqlite
+  ttl_days: 30
+
+pack: config/question_pack.yaml
+
+reduce:
+  sim_threshold: 0.5
+  redact_ips: false
+
+router:
+  suppress_benign_min: 0.95
+  suppress_actionable_max: 0.10
+  never_suppress_levels: [ERROR, FATAL]
+  suppress_min_count: 20
+  noise_allowlist: [health, heartbeat, "readyz|livez", cache hit, metrics]
+  escalate_actionable_min: 0.6
+  escalate_novel_min: 0.5
+  escalate_severity_min: 2.5
+  known_issue_runbook_min: 0.7
+  sensitive_flag_min: 0.5
+  uncertainty_band: 0.1
+
+# template_id -> ticket or runbook link. Matching clusters route to known_issue.
+known_issues: {}
+
+# Optional runbook routing (use case 11). When set, a `runbook` Choice is added to the pack.
+runbooks: {}
+#  db-pool: Database connection pool exhaustion or slow queries.
+#  auth-tokens: Token validation, expiry or identity provider failures.
+
+correlate:
+  enabled: true
+  same_issue_threshold: 0.6
+  max_gap_s: 600
+  change_lookback_s: 3600
+  change_threshold: 0.5
+  # Service call graph used to prune candidate pairs. Unlisted services pair only with themselves.
+  topology:
+    api-gateway: [checkout, auth, inventory]
+    checkout: [payments, inventory]
+    payments: [payments-db]
+    auth: []
+    inventory: []
+
+narrate:
+  kind: template              # template | claude
+  top_k: 3
+  model: claude-opus-5
+  effort: medium
+
+pricing:
+  usd_per_m_input: 0.042      # self-reported launch-week figure; verify current pricing
+  billing: per_question       # per_question (state billed once per question) | per_request
+
+sink:
+  kind: jsonl                 # jsonl | clickhouse | both
+  out_dir: out
+  clickhouse_database: jev

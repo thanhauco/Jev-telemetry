@@ -1,0 +1,68 @@
+# Local stack: OTel Collector -> ClickHouse -> Grafana, plus the Jev worker.
+#   docker compose -f deploy/docker-compose.yml up -d
+#   jev-telemetry replay --input samples/logs.jsonl     # feed sample logs over OTLP
+# Grafana: http://localhost:3000 (admin / admin). ClickHouse HTTP: http://localhost:8123.
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    volumes:
+      - ./clickhouse/init.sql:/docker-entrypoint-initdb.d/01-jev.sql:ro
+      - clickhouse-data:/var/lib/clickhouse
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8123/ping"]
+      interval: 5s
+      retries: 20
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.115.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - clickhouse
+
+  # Micro-batch worker: every window, mine templates from otel_logs, judge, route, write back.
+  jev-worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    command: ["stream", "--window", "60", "--lag", "15"]
+    environment:
+      CLICKHOUSE_URL: http://clickhouse:8123
+      JEV_BACKEND: ${JEV_BACKEND:-heuristic}
+      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
+    volumes:
+      - jev-cache:/app/.jev-cache
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  clickhouse-data:
+  jev-cache:
